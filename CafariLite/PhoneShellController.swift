@@ -100,6 +100,10 @@ final class PhoneShellController: UIViewController {
       show(settings, dark: traitCollection.userInterfaceStyle == .dark, selected: .settings)
     } else if env["CAFARI_OPEN_LINKS"] == "1" || env["CAFARI_TRACE_LINK"] == "1" {
       show(links, dark: traitCollection.userInterfaceStyle == .dark, selected: .links)
+    } else if WallpaperSetup.shouldPresent() {
+      let setup = WallpaperHubFactory.makeSetupSheet()
+      setup.modalPresentationStyle = .formSheet
+      present(setup, animated: true)
     }
   }
 
