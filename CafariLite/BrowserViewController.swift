@@ -10,6 +10,21 @@
 import UIKit
 import WebKit
 
+private enum BrowserChrome {
+  private static func adaptive(light: UIColor, dark: UIColor) -> UIColor {
+    UIColor { traits in
+      traits.userInterfaceStyle == .dark ? dark : light
+    }
+  }
+
+  static let phoneCanvas = adaptive(
+    light: UIColor(red: 0.07, green: 0.11, blue: 0.22, alpha: 1),
+    dark: UIColor(red: 0.07, green: 0.09, blue: 0.14, alpha: 1))
+  static let phoneToolbar = adaptive(
+    light: .secondarySystemBackground,
+    dark: UIColor(white: 1, alpha: 0.10))
+}
+
 final class BrowserViewController: UIViewController, WKNavigationDelegate {
   private let home: URL
   private let showsStatus: Bool
@@ -24,6 +39,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
   private let carDim = UIView()
   private let playbackRelay = CarPlaybackRelay()
   private var floatingBar: UIView?
+  private var phoneToolbar: UIStackView?
 
   init(showsStatus: Bool, initialURL: URL? = nil) {
     self.home = initialURL ?? URL(string: "https://m.youtube.com")!
@@ -40,9 +56,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
     // colour no system background ever is: in dark mode systemBackground is
     // itself black, so it could not distinguish "our view is up and the page
     // did not draw" from "our window is not on screen", which was the point.
-    view.backgroundColor = showsStatus
-      ? UIColor(red: 0.07, green: 0.11, blue: 0.22, alpha: 1)
-      : .black
+    view.backgroundColor = showsStatus ? BrowserChrome.phoneCanvas : .black
 
     let configuration = WKWebViewConfiguration()
     // Play in place rather than handing off to the full-screen system player,
@@ -94,9 +108,18 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
     }
 
     floatingBar = bar
+    if showsStatus, let stack = bar as? UIStackView {
+      phoneToolbar = stack
+    }
     Log.write("loading \(home.absoluteString)")
     loadPage(home)
     applyCarChrome()
+    if showsStatus {
+      registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in
+        self.applyPhoneChrome()
+      }
+      applyPhoneChrome()
+    }
 
     if showsStatus {
       NotificationCenter.default.addObserver(
@@ -142,7 +165,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
     container.spacing = 16
     container.isLayoutMarginsRelativeArrangement = true
     container.layoutMargins = UIEdgeInsets(top: 6, left: 16, bottom: 6, right: 16)
-    container.backgroundColor = .secondarySystemBackground
+    container.backgroundColor = showsStatus ? BrowserChrome.phoneToolbar : .secondarySystemBackground
 
     func button(_ systemName: String, _ handler: @escaping () -> Void) -> UIButton {
       let b = UIButton(type: .system, primaryAction: UIAction { _ in handler() })
@@ -329,6 +352,12 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
   private func applyCarChrome() {
     guard !showsStatus else { return }
     floatingBar?.isHidden = Settings.fullScreenCar
+  }
+
+  private func applyPhoneChrome() {
+    guard showsStatus else { return }
+    view.backgroundColor = BrowserChrome.phoneCanvas
+    phoneToolbar?.backgroundColor = BrowserChrome.phoneToolbar
   }
 
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!,

@@ -1,5 +1,7 @@
 # Cafari Lite
 
+**Cafari is the successor to Reels Sync.** This repository ships one CarPlay video app for phone and car: bundle ID `com.samuelsanchez.ytos27`. Install Cafari (not a separate “Reels” build) to avoid duplicate CarPlay icons.
+
 The small, open part of [Cafari](https://github.com/rPlayAI/cafari-public): a web view on the CarPlay screen, pointed at YouTube's mobile site, and nothing else. An app delegate, two scene delegates and one view controller.
 
 The full app also casts to Chromecast and AirPlay receivers, and its sideload builds live in that repository.

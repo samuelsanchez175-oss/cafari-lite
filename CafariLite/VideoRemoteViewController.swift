@@ -70,12 +70,29 @@ enum CarPlaybackKey {
 }
 
 private enum ControllerColor {
+  private static func adaptive(light: UIColor, dark: UIColor) -> UIColor {
+    UIColor { traits in
+      traits.userInterfaceStyle == .dark ? dark : light
+    }
+  }
+
   static let blue = UIColor(red: 10 / 255, green: 132 / 255, blue: 255 / 255, alpha: 1)
-  static let capsule = UIColor(red: 24 / 255, green: 24 / 255, blue: 26 / 255, alpha: 1)
-  static let pill = UIColor(red: 24 / 255, green: 24 / 255, blue: 27 / 255, alpha: 1)
-  static let zinc300 = UIColor(red: 212 / 255, green: 212 / 255, blue: 216 / 255, alpha: 1)
-  static let zinc400 = UIColor(red: 161 / 255, green: 161 / 255, blue: 170 / 255, alpha: 1)
-  static let zinc500 = UIColor(red: 113 / 255, green: 113 / 255, blue: 122 / 255, alpha: 1)
+  static let capsule = adaptive(
+    light: UIColor(red: 24 / 255, green: 24 / 255, blue: 26 / 255, alpha: 1),
+    dark: UIColor(white: 1, alpha: 0.10))
+  static let pill = adaptive(
+    light: UIColor(red: 24 / 255, green: 24 / 255, blue: 27 / 255, alpha: 1),
+    dark: UIColor(white: 1, alpha: 0.12))
+  static let zinc300 = adaptive(light: UIColor(red: 212 / 255, green: 212 / 255, blue: 216 / 255, alpha: 1), dark: .white)
+  static let zinc400 = adaptive(
+    light: UIColor(red: 161 / 255, green: 161 / 255, blue: 170 / 255, alpha: 1),
+    dark: UIColor(white: 1, alpha: 0.72))
+  static let zinc500 = adaptive(
+    light: UIColor(red: 113 / 255, green: 113 / 255, blue: 122 / 255, alpha: 1),
+    dark: UIColor(white: 1, alpha: 0.55))
+  static func hairline(_ alpha: CGFloat, traits: UITraitCollection) -> CGColor {
+    UIColor.white.withAlphaComponent(alpha).resolvedColor(with: traits).cgColor
+  }
 }
 
 private final class PillSlider: UISlider {
@@ -128,6 +145,8 @@ final class VideoRemoteViewController: UIViewController {
   private let youtubeBadge = UIButton(type: .custom)
   private let durationBadge = UIView()
   private let durationLabel = UILabel()
+  private let scrubberShell = UIView()
+  private let targetShell = UIView()
 
   init(
     clips: [ControllerClip],
@@ -176,6 +195,10 @@ final class VideoRemoteViewController: UIViewController {
     view.backgroundColor = .black
     overrideUserInterfaceStyle = .dark
     buildInterface()
+    applyRemoteChrome()
+    registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in
+      self.applyRemoteChrome()
+    }
     showCurrentClip()
     NotificationCenter.default.addObserver(
       self, selector: #selector(carPlaybackUpdated(_:)),
@@ -622,7 +645,6 @@ final class VideoRemoteViewController: UIViewController {
     transport.alignment = .center
     transport.spacing = 36
 
-    let scrubberShell = UIView()
     scrubberShell.backgroundColor = ControllerColor.capsule
     scrubberShell.layer.cornerRadius = 24
     scrubberShell.layer.cornerCurve = .continuous
@@ -630,7 +652,6 @@ final class VideoRemoteViewController: UIViewController {
     scrubberShell.layer.borderColor = UIColor.white.withAlphaComponent(0.05).cgColor
     layoutScrubber(in: scrubberShell)
 
-    let targetShell = UIView()
     targetShell.backgroundColor = ControllerColor.pill
     targetShell.layer.cornerRadius = 24
     targetShell.layer.cornerCurve = .continuous
@@ -722,6 +743,16 @@ final class VideoRemoteViewController: UIViewController {
       dimView.trailingAnchor.constraint(equalTo: playerView.trailingAnchor),
       dimView.bottomAnchor.constraint(equalTo: playerView.bottomAnchor),
     ])
+  }
+
+  private func applyRemoteChrome() {
+    let traits = traitCollection
+    playerView.layer.borderColor = ControllerColor.hairline(0.10, traits: traits)
+    scrubberShell.layer.borderColor = ControllerColor.hairline(0.05, traits: traits)
+    targetShell.layer.borderColor = ControllerColor.hairline(0.10, traits: traits)
+    durationBadge.layer.borderColor = ControllerColor.hairline(0.10, traits: traits)
+    scrubberShell.backgroundColor = ControllerColor.capsule
+    targetShell.backgroundColor = ControllerColor.pill
   }
 
   private func layoutScrubber(in shell: UIView) {

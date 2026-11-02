@@ -165,6 +165,11 @@ final class SavedLinkStore {
 final class PhonePlayback {
   static let shared = PhonePlayback()
 
+  private enum SessionKeys {
+    static let lastLinkID = "cafariLastPlaybackLinkID"
+    static let queueIndex = "cafariLastPlaybackQueueIndex"
+  }
+
   var mode: PlayMode = .webOnCar {
     didSet { NotificationCenter.default.post(name: .cafariLitePlayModeChanged, object: nil) }
   }
@@ -177,11 +182,13 @@ final class PhonePlayback {
   func remember(title: String, url: URL?) {
     currentTitle = title
     currentURL = url
+    if url != nil { persistSession() }
   }
 
   func setQueue(_ links: [SavedLink], index: Int) {
     queue = links
     queueIndex = links.indices.contains(index) ? index : 0
+    persistSession()
   }
 
   func noteIndex(_ index: Int) {
@@ -198,6 +205,28 @@ final class PhonePlayback {
     let link = queue[next]
     remember(title: link.title, url: link.url)
     return link
+  }
+
+  /// Restores the last watched link from disk when the in-memory session is empty.
+  func restoreSavedSession(from links: [SavedLink]) {
+    guard currentURL == nil,
+          let idString = UserDefaults.standard.string(forKey: SessionKeys.lastLinkID),
+          let id = UUID(uuidString: idString),
+          let linkIndex = links.firstIndex(where: { $0.id == id }) else {
+      return
+    }
+    let savedIndex = UserDefaults.standard.integer(forKey: SessionKeys.queueIndex)
+    let index = links.indices.contains(savedIndex) ? savedIndex : linkIndex
+    setQueue(links, index: index)
+    let link = links[index]
+    remember(title: link.title, url: link.url)
+  }
+
+  private func persistSession() {
+    guard queue.indices.contains(queueIndex) else { return }
+    let link = queue[queueIndex]
+    UserDefaults.standard.set(link.id.uuidString, forKey: SessionKeys.lastLinkID)
+    UserDefaults.standard.set(queueIndex, forKey: SessionKeys.queueIndex)
   }
 
   func clipQueue() -> [ControllerClip] {
