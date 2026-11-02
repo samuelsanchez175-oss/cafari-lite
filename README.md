@@ -61,8 +61,10 @@ No Xcode UI needed. Xcode itself has to be installed, for the toolchain and
 the SDK, but nothing here opens it.
 
 ```sh
-git clone https://github.com/rPlayAI/cafari-lite.git
+git clone https://github.com/samuelsanchez175-oss/cafari-lite.git
 cd cafari-lite
+
+> **Git remote:** `origin` may point at [rPlayAI/cafari-lite](https://github.com/rPlayAI/cafari-lite) (push can return **403** without org access). Use the fork above or `git remote add fork https://github.com/samuelsanchez175-oss/cafari-lite.git` and push integration work to `fork`.
 cp Local.xcconfig.example Local.xcconfig     # then edit it, see below
 tools/run-on-device.sh                       # builds, signs, installs
 ```
