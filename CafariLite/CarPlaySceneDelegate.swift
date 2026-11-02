@@ -32,12 +32,14 @@ final class CarPlaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.makeKeyAndVisible()
     self.window = window
     Log.write("car scene connected \(window.bounds.size)")
+    CarSessionState.setConnected(true)
     NotificationCenter.default.post(name: .cafariLiteCarConnected, object: nil)
   }
 
   func sceneDidDisconnect(_ scene: UIScene) {
     Log.write("car scene disconnected")
     window = nil
+    CarSessionState.setConnected(false)
     NotificationCenter.default.post(name: .cafariLiteCarDisconnected, object: nil)
   }
 }

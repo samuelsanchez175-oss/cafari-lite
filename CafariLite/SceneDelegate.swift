@@ -26,5 +26,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.makeKeyAndVisible()
     self.window = window
     Log.write("phone window up \(window.bounds.size) root=Library dock=visible")
+    Task { @MainActor in
+      _ = CarPlayEntitlementDoctor.shared.audit(reason: "launch")
+    }
   }
 }

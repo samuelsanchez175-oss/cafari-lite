@@ -1,6 +1,22 @@
 import Photos
 import UIKit
 
+private enum LibraryTaste {
+    private static func adaptive(light: UIColor, dark: UIColor) -> UIColor {
+        UIColor { traits in
+            traits.userInterfaceStyle == .dark ? dark : light
+        }
+    }
+
+    static let canvas = adaptive(light: .systemBackground, dark: .black)
+    static let surface = adaptive(
+        light: .secondarySystemBackground,
+        dark: UIColor(white: 1, alpha: 0.10))
+    static let tile = adaptive(
+        light: .secondarySystemBackground,
+        dark: UIColor(white: 1, alpha: 0.08))
+}
+
 final class PhotoLibraryViewController: UIViewController {
     private let imageManager = PHCachingImageManager()
     private let collectionView = UICollectionView(frame: .zero, collectionViewLayout: UICollectionViewFlowLayout())
@@ -27,11 +43,25 @@ final class PhotoLibraryViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = LibraryTaste.canvas
         PHPhotoLibrary.shared().register(self)
         imageManager.allowsCachingHighQualityImages = true
         buildInterface()
         updatePermissionState()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in
+            self.applyChrome()
+            self.setNeedsStatusBarAppearanceUpdate()
+        }
+        applyChrome()
+    }
+
+    private func applyChrome() {
+        view.backgroundColor = LibraryTaste.canvas
+        collectionView.backgroundColor = LibraryTaste.canvas
+        titleLabel.textColor = .label
+        moreButton.tintColor = .label
+        moreButton.backgroundColor = LibraryTaste.surface
+        permissionView.backgroundColor = LibraryTaste.surface
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -58,7 +88,7 @@ final class PhotoLibraryViewController: UIViewController {
 
         moreButton.setImage(UIImage(systemName: "ellipsis"), for: .normal)
         moreButton.tintColor = .label
-        moreButton.backgroundColor = .secondarySystemBackground
+        moreButton.backgroundColor = LibraryTaste.surface
         moreButton.layer.cornerRadius = 16
         moreButton.accessibilityLabel = "More library options"
         moreButton.addAction(UIAction { [weak self] _ in self?.showMoreOptions() }, for: .touchUpInside)
@@ -84,7 +114,7 @@ final class PhotoLibraryViewController: UIViewController {
                 targetSize: CGSize(width: cellSide, height: cellSide))
         }
 
-        collectionView.backgroundColor = .systemBackground
+        collectionView.backgroundColor = LibraryTaste.canvas
         collectionView.alwaysBounceVertical = true
         collectionView.contentInset = UIEdgeInsets(top: 0, left: 2, bottom: 112, right: 2)
         collectionView.verticalScrollIndicatorInsets = collectionView.contentInset
@@ -186,7 +216,7 @@ final class PhotoLibraryViewController: UIViewController {
     }
 
     private func buildPermissionView() {
-        permissionView.backgroundColor = .secondarySystemBackground
+        permissionView.backgroundColor = LibraryTaste.surface
         permissionView.layer.cornerRadius = 18
         permissionView.isHidden = true
         permissionView.translatesAutoresizingMaskIntoConstraints = false
@@ -248,6 +278,7 @@ final class PhotoLibraryViewController: UIViewController {
 
     private func updatePermissionState() {
         Log.write("library photos \(photoAccessLabel())")
+        LibraryTrace.shared.record(.ui, "photos auth", detail: photoAccessLabel())
         let canRead = authorizationStatus == .authorized || authorizationStatus == .limited
         permissionView.isHidden = canRead
 
@@ -271,6 +302,7 @@ final class PhotoLibraryViewController: UIViewController {
     }
 
     private func loadAlbums() {
+        LibraryTrace.shared.record(.load, "load albums start")
         Task { [weak self] in
             let (fetchedAlbums, summary) = await Task.detached(priority: .userInitiated) {
                 let options = Self.defaultFetchOptions()
@@ -488,7 +520,7 @@ private final class PhotoAssetCell: UICollectionViewCell {
         super.init(frame: frame)
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
-        imageView.backgroundColor = .secondarySystemBackground
+        imageView.backgroundColor = LibraryTaste.tile
         imageView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(imageView)
 
