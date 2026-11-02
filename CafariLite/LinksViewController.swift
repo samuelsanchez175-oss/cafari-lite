@@ -1,4 +1,4 @@
-// Links. Light page from the Stitch saved-links screen.
+// Links. Saved-links screen; Taste colors adapt to light and dark.
 // One of Stream, Web on car, and Mirror stays on.
 // Web on car only sets the mode. Stream plays the current item on the car.
 // Mirror shows the current page on the phone and sends that page to the car.
@@ -18,6 +18,12 @@ private enum Taste {
   static let whisper = adaptive(
     light: UIColor(red: 226/255, green: 232/255, blue: 240/255, alpha: 0.7),
     dark: UIColor(white: 1, alpha: 0.12))
+  /// Raised controls (search, paste row, mode pill when selected).
+  static let surface = adaptive(light: .white, dark: UIColor(white: 1, alpha: 0.10))
+  static let modeSelected = adaptive(light: .white, dark: UIColor(white: 1, alpha: 0.14))
+  static let placeholder = adaptive(
+    light: UIColor(red: 113/255, green: 113/255, blue: 122/255, alpha: 1),
+    dark: UIColor(white: 1, alpha: 0.45))
   static let electric = UIColor(red: 10/255, green: 132/255, blue: 255/255, alpha: 1)
   static let electricSubtle = UIColor(red: 10/255, green: 132/255, blue: 255/255, alpha: 0.08)
   static let amber = UIColor(red: 251/255, green: 191/255, blue: 36/255, alpha: 1)
@@ -32,11 +38,12 @@ private enum Taste {
   static let webBadge = UIColor(red: 220/255, green: 38/255, blue: 38/255, alpha: 0.85)
 }
 
-final class LinksViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+final class LinksViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate {
   private let store = SavedLinkStore.shared
   private var selecting = false
   private var checked: Set<UUID> = []
   private let table = UITableView(frame: .zero, style: .plain)
+  private let searchField = UITextField()
   private let countLabel = UILabel()
   private let selectButton = UIButton(type: .system)
   private let carPill = UIButton(type: .system)
@@ -47,6 +54,11 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
   ]
   private var observers: [NSObjectProtocol] = []
   private var didTraceLink = false
+  private weak var chromeAdd: UIButton?
+  private weak var chromeSearch: UITextField?
+  private weak var chromePaste: UIButton?
+  private weak var chromeCapsule: UIView?
+  private weak var chromeModes: UIStackView?
 
   deinit {
     let center = NotificationCenter.default
@@ -80,10 +92,10 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     let plus = UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)
     add.setImage(UIImage(systemName: "plus", withConfiguration: plus), for: .normal)
     add.tintColor = Taste.charcoal
-    add.backgroundColor = .white
+    add.backgroundColor = Taste.surface
     add.layer.cornerRadius = 18
     add.layer.borderWidth = 1
-    add.layer.borderColor = Taste.whisper.cgColor
+    chromeAdd = add
     add.layer.shadowColor = UIColor.black.cgColor
     add.layer.shadowOpacity = 0.04
     add.layer.shadowRadius = 3
@@ -101,6 +113,7 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     modes.layer.borderWidth = 1
     modes.layer.borderColor = Taste.whisper.cgColor
     modes.clipsToBounds = true
+    chromeModes = modes
     modes.isLayoutMarginsRelativeArrangement = true
     modes.layoutMargins = UIEdgeInsets(top: 2, left: 2, bottom: 2, right: 2)
     modes.translatesAutoresizingMaskIntoConstraints = false
@@ -112,11 +125,29 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     }
     header.addSubview(modes)
 
+    searchField.placeholder = "Search YouTube"
+    searchField.font = .systemFont(ofSize: 15, weight: .medium)
+    searchField.textColor = Taste.charcoal
+    searchField.backgroundColor = Taste.surface
+    searchField.layer.cornerRadius = 18
+    searchField.layer.borderWidth = 1
+    chromeSearch = searchField
+    searchField.returnKeyType = .search
+    searchField.autocorrectionType = .no
+    searchField.autocapitalizationType = .none
+    searchField.clearButtonMode = .whileEditing
+    searchField.delegate = self
+    searchField.accessibilityLabel = "Search YouTube"
+    searchField.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 14, height: 36))
+    searchField.leftViewMode = .always
+    searchField.translatesAutoresizingMaskIntoConstraints = false
+    header.addSubview(searchField)
+
     let paste = UIButton(type: .custom, primaryAction: UIAction { [weak self] _ in self?.pasteTapped() })
-    paste.backgroundColor = .white
+    paste.backgroundColor = Taste.surface
     paste.layer.cornerRadius = 18
     paste.layer.borderWidth = 1
-    paste.layer.borderColor = Taste.whisper.cgColor
+    chromePaste = paste
     paste.layer.shadowColor = UIColor.black.cgColor
     paste.layer.shadowOpacity = 0.04
     paste.layer.shadowRadius = 4
@@ -148,10 +179,10 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     pasteLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
     let capsule = UIView()
-    capsule.backgroundColor = .white
+    capsule.backgroundColor = Taste.surface
     capsule.layer.cornerRadius = 18
     capsule.layer.borderWidth = 1
-    capsule.layer.borderColor = Taste.whisper.cgColor
+    chromeCapsule = capsule
     capsule.clipsToBounds = true
     capsule.translatesAutoresizingMaskIntoConstraints = false
     header.addSubview(capsule)
@@ -189,6 +220,9 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     table.register(LinkRowCell.self, forCellReuseIdentifier: LinkRowCell.reuseID)
     table.translatesAutoresizingMaskIntoConstraints = false
     table.contentInset.bottom = 110
+    table.dragDelegate = self
+    table.dropDelegate = self
+    table.dragInteractionEnabled = true
     view.addSubview(table)
 
     NSLayoutConstraint.activate([
@@ -208,7 +242,11 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
       modes.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
       modes.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
       modes.heightAnchor.constraint(equalToConstant: 36),
-      paste.topAnchor.constraint(equalTo: modes.bottomAnchor, constant: 10),
+      searchField.topAnchor.constraint(equalTo: modes.bottomAnchor, constant: 10),
+      searchField.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
+      searchField.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
+      searchField.heightAnchor.constraint(equalToConstant: 36),
+      paste.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 10),
       paste.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
       paste.heightAnchor.constraint(equalToConstant: 36),
       capsule.centerYAnchor.constraint(equalTo: paste.centerYAnchor),
@@ -270,8 +308,26 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
         self?.refreshModes()
       },
     ]
+    registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in
+      self.applyChrome()
+      self.setNeedsStatusBarAppearanceUpdate()
+    }
+    applyChrome()
     refreshPill()
     observeState()
+  }
+
+  private func applyChrome() {
+    let border = Taste.whisper.resolvedColor(with: traitCollection).cgColor
+    chromeAdd?.layer.borderColor = border
+    chromeSearch?.layer.borderColor = border
+    chromePaste?.layer.borderColor = border
+    chromeCapsule?.layer.borderColor = border
+    chromeModes?.layer.borderColor = border
+    chromeSearch?.attributedPlaceholder = NSAttributedString(
+      string: "Search YouTube",
+      attributes: [.foregroundColor: Taste.placeholder.resolvedColor(with: traitCollection)])
+    table.separatorColor = Taste.whisper.resolvedColor(with: traitCollection)
   }
 
   private func observeState() {
@@ -318,6 +374,30 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     return cell
   }
 
+  func tableView(
+    _ tableView: UITableView,
+    trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+  ) -> UISwipeActionsConfiguration? {
+    guard !selecting, store.links.indices.contains(indexPath.row) else { return nil }
+    let link = store.links[indexPath.row]
+    let rename = UIContextualAction(style: .normal, title: "Rename") { [weak self] _, _, done in
+      self?.renameLink(link)
+      done(true)
+    }
+    rename.backgroundColor = Taste.electric
+    let delete = UIContextualAction(style: .destructive, title: "Delete") { [weak self] _, _, done in
+      self?.deleteLink(link)
+      done(true)
+    }
+    let actions = UISwipeActionsConfiguration(actions: [delete, rename])
+    actions.performsFirstActionWithFullSwipe = false
+    return actions
+  }
+
+  func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
+    !selecting
+  }
+
   func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     tableView.deselectRow(at: indexPath, animated: true)
     let link = store.links[indexPath.row]
@@ -352,6 +432,48 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
       page.modalPresentationStyle = .fullScreen
       present(page, animated: true)
     }
+  }
+
+  func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+    submitSearch()
+    return true
+  }
+
+  private func submitSearch() {
+    let query = searchField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !query.isEmpty else { return }
+    var parts = URLComponents(string: "https://m.youtube.com/results")
+    parts?.queryItems = [URLQueryItem(name: "search_query", value: query)]
+    guard let url = parts?.url else { return }
+    Log.write("links search \(query)")
+    searchField.resignFirstResponder()
+    let page = BrowserViewController(showsStatus: true, initialURL: url)
+    page.modalPresentationStyle = .fullScreen
+    present(page, animated: true)
+  }
+
+  private func deleteLink(_ link: SavedLink) {
+    Log.write("links delete \(link.title)")
+    store.delete(id: link.id)
+  }
+
+  private func renameLink(_ link: SavedLink) {
+    let alert = UIAlertController(title: "Rename", message: nil, preferredStyle: .alert)
+    alert.addTextField { field in
+      field.text = link.title
+      field.clearButtonMode = .whileEditing
+    }
+    alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    alert.addAction(UIAlertAction(title: "Save", style: .default) { [weak self] _ in
+      let title = alert.textFields?.first?.text ?? ""
+      if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Log.write("links rename empty")
+        return
+      }
+      Log.write("links rename \(link.title)")
+      self?.store.rename(id: link.id, title: title)
+    })
+    present(alert, animated: true)
   }
 
   private func pillTapped() {
@@ -510,7 +632,7 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
       config.title = titleFor(mode)
       config.cornerStyle = .capsule
       config.baseForegroundColor = on ? Taste.electric : Taste.charcoal.withAlphaComponent(0.6)
-      config.background.backgroundColor = on ? .white : .clear
+      config.background.backgroundColor = on ? Taste.modeSelected : .clear
       config.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6)
       config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
         var out = incoming
@@ -543,6 +665,47 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     button.accessibilityLabel = access
     button.translatesAutoresizingMaskIntoConstraints = false
     return button
+  }
+}
+
+extension LinksViewController: UITableViewDragDelegate, UITableViewDropDelegate {
+  func tableView(
+    _ tableView: UITableView,
+    itemsForBeginning session: UIDragSession,
+    at indexPath: IndexPath
+  ) -> [UIDragItem] {
+    guard !selecting, store.links.indices.contains(indexPath.row) else { return [] }
+    let link = store.links[indexPath.row]
+    let item = UIDragItem(itemProvider: NSItemProvider(object: link.id.uuidString as NSString))
+    item.localObject = link.id
+    return [item]
+  }
+
+  func tableView(
+    _ tableView: UITableView,
+    dropSessionDidUpdate session: UIDropSession,
+    withDestinationIndexPath destinationIndexPath: IndexPath?
+  ) -> UITableViewDropProposal {
+    guard !selecting, session.localDragSession != nil else {
+      return UITableViewDropProposal(operation: .cancel)
+    }
+    return UITableViewDropProposal(operation: .move, intent: .insertAtDestinationIndexPath)
+  }
+
+  func tableView(_ tableView: UITableView, performDropWith coordinator: UITableViewDropCoordinator) {
+    guard !selecting,
+          let item = coordinator.items.first,
+          let source = item.sourceIndexPath,
+          let id = item.dragItem.localObject as? UUID,
+          store.links.indices.contains(source.row) else { return }
+    let proposed = coordinator.destinationIndexPath?.row ?? store.links.count
+    var destination = proposed
+    if source.row < destination { destination -= 1 }
+    if destination >= store.links.count { destination = store.links.count - 1 }
+    guard store.links.indices.contains(destination) else { return }
+    Log.write("links move \(store.links[source.row].title) to \(destination)")
+    store.move(id: id, to: destination)
+    coordinator.drop(item.dragItem, toRowAt: IndexPath(row: destination, section: 0))
   }
 }
 
@@ -635,7 +798,6 @@ private final class LinkThumbView: UIView {
     super.init(frame: frame)
     layer.cornerRadius = 12
     layer.borderWidth = 1
-    layer.borderColor = Taste.charcoal.withAlphaComponent(0.2).cgColor
     clipsToBounds = true
     layer.insertSublayer(gradient, at: 0)
 
@@ -666,6 +828,7 @@ private final class LinkThumbView: UIView {
     badge.clipsToBounds = true
     badge.translatesAutoresizingMaskIntoConstraints = false
     addSubview(badge)
+    refreshBorder()
 
     NSLayoutConstraint.activate([
       caption.centerXAnchor.constraint(equalTo: centerXAnchor),
@@ -695,6 +858,16 @@ private final class LinkThumbView: UIView {
   override func layoutSubviews() {
     super.layoutSubviews()
     gradient.frame = bounds
+  }
+
+  override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+    super.traitCollectionDidChange(previousTraitCollection)
+    guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) else { return }
+    refreshBorder()
+  }
+
+  private func refreshBorder() {
+    layer.borderColor = Taste.whisper.resolvedColor(with: traitCollection).cgColor
   }
 
   func apply(style: String, duration: String?) {
