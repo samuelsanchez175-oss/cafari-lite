@@ -1,6 +1,8 @@
 // Copy to Local.xcconfig and edit. Never committed.
-CAFARI_LITE_BUNDLE_ID = com.yourname.cafarilite
-CAFARI_LITE_TEAM = ABCDE12345
+//
+// Defaults in Signing.xcconfig already use com.samuelsanchez.ytos27 and
+// CarPlay.entitlements. Override here only for a different team or bundle id.
 
-// Only once Apple has granted your account the CarPlay entitlements:
-// CAFARI_LITE_ENTITLEMENTS = CarPlay.entitlements
+CAFARI_LITE_BUNDLE_ID = com.samuelsanchez.ytos27
+CAFARI_LITE_TEAM = ABCDE12345
+CAFARI_LITE_ENTITLEMENTS = CarPlay.entitlements

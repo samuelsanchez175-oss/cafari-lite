@@ -79,7 +79,7 @@ Values can come from the environment instead of the file, which is what CI
 would do:
 
 ```sh
-BUNDLE_ID=com.you.cafarilite TEAM=ABCDE12345 tools/run-on-device.sh
+BUNDLE_ID=com.samuelsanchez.ytos27 TEAM=ABCDE12345 tools/run-on-device.sh
 ```
 
 The script prints which CarPlay entitlements ended up in the signed app, so
@@ -93,9 +93,9 @@ bundle id never show up in `git status` and never land in a pull request.
 
 | Setting | What it is |
 | --- | --- |
-| `CAFARI_LITE_BUNDLE_ID` | Your own bundle identifier |
+| `CAFARI_LITE_BUNDLE_ID` | Default `com.samuelsanchez.ytos27` (override in `Local.xcconfig` if needed) |
 | `CAFARI_LITE_TEAM` | Your ten-character Apple Developer team |
-| `CAFARI_LITE_ENTITLEMENTS` | Empty, or `CarPlay.entitlements` (see below) |
+| `CAFARI_LITE_ENTITLEMENTS` | Default `CarPlay.entitlements` (see below) |
 
 ### In Xcode instead
 
@@ -111,8 +111,8 @@ Only once Apple has granted your account **both** CarPlay entitlements, video
 and audio. Video alone is not enough: the app builds, installs and runs on the
 phone, and simply never appears on the head unit, with no error anywhere.
 
-Set `CAFARI_LITE_ENTITLEMENTS = CarPlay.entitlements` in your
-`Local.xcconfig`, build again, and connect to CarPlay.
+`Signing.xcconfig` already sets `CAFARI_LITE_ENTITLEMENTS = CarPlay.entitlements`.
+Override in `Local.xcconfig` only if you need a phone-only build, then connect to CarPlay.
 
 If the entitlements are missing the build fails to sign, which is the intended
 failure: it is clearer than an app that installs and then shows nothing in the
