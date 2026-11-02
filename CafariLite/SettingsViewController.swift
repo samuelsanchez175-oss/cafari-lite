@@ -4,6 +4,7 @@ final class SettingsViewController: UITableViewController {
     private enum Section: Int, CaseIterable {
         case appearance
         case ambient
+        case wallpaper
         case display
         case playback
         case diagnostics
@@ -64,6 +65,7 @@ final class SettingsViewController: UITableViewController {
         guard let section = Section(rawValue: section) else { return 0 }
         return switch section {
         case .appearance, .ambient: 1
+        case .wallpaper: 2
         case .display, .playback: 5
         case .diagnostics: 3
         case .legal: 2
@@ -75,6 +77,7 @@ final class SettingsViewController: UITableViewController {
         return switch section {
         case .appearance: "APPEARANCE"
         case .ambient: "AMBIENT"
+        case .wallpaper: "WALLPAPER & IDLE"
         case .display: "CARPLAY DISPLAY"
         case .playback: "PLAYBACK & AUDIO"
         case .diagnostics: "DIAGNOSTICS & LOGS"
@@ -87,6 +90,8 @@ final class SettingsViewController: UITableViewController {
         return switch section {
         case .ambient:
             "Projects dynamic blue ambient lighting behind the dock."
+        case .wallpaper:
+            "Choose what fills the car home screen behind your starred links. Full-Screen Mode only affects the in-car browser toolbar."
         case .display:
             "Wallpaper Shortcuts shows Maps, Music, Phone, and Dashboard next to your starred links."
         case .diagnostics:
@@ -120,6 +125,14 @@ final class SettingsViewController: UITableViewController {
                 Settings.ambientLightSync = isOn
                 Log.write("settings Ambient Light Sync=\(isOn)")
                 NotificationCenter.default.post(name: .cafariLiteSettingsChanged, object: nil)
+            }
+            return cell
+        case .wallpaper:
+            let cell = tableView.dequeueReusableCell(withIdentifier: SettingsDetailCell.reuseIdentifier, for: indexPath) as! SettingsDetailCell
+            if indexPath.row == 0 {
+                cell.configure(title: "Wallpaper & Ambient", detail: IdleLookStore.shared.selectedLook.title)
+            } else {
+                cell.configure(title: "Run wallpaper setup again", detail: "")
             }
             return cell
         case .display:
@@ -204,6 +217,16 @@ final class SettingsViewController: UITableViewController {
         guard let section = Section(rawValue: indexPath.section) else { return }
 
         switch section {
+        case .wallpaper:
+            if indexPath.row == 0 {
+                Log.write("settings open wallpaper hub")
+                present(WallpaperHubFactory.makeNavigationHub(), animated: true)
+            } else {
+                Log.write("settings wallpaper setup again")
+                let setup = WallpaperHubFactory.makeSetupSheet()
+                setup.modalPresentationStyle = .formSheet
+                present(setup, animated: true)
+            }
         case .diagnostics:
             let titles = ["Playback errors", "Car Action Log", "Player Bug Catcher"]
             let title = titles[indexPath.row]

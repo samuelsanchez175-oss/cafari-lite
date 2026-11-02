@@ -6,6 +6,8 @@ final class CarPlayHomeViewController: UIViewController {
     private var sidebar: UIVisualEffectView!
     private var sidebarWidth: NSLayoutConstraint!
     private var cellRegistration: UICollectionView.CellRegistration<CarPlayFavoriteCell, SavedLink>!
+    private let idleBackdrop = CarIdleBackdropView()
+    private let homeScrim = UIView()
 
     init(links: [SavedLink] = []) {
         self.links = links.filter(\.starred)
@@ -24,6 +26,7 @@ final class CarPlayHomeViewController: UIViewController {
         buildInterface()
         reloadStarred()
         applyWallpaperDock()
+        idleBackdrop.refresh()
         Log.write("car home starred=\(links.count)")
         NotificationCenter.default.addObserver(
             self,
@@ -40,6 +43,20 @@ final class CarPlayHomeViewController: UIViewController {
             selector: #selector(settingsChanged),
             name: .cafariLiteSettingsChanged,
             object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(idleLookChanged),
+            name: .cafariLiteIdleLookChanged,
+            object: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(idleLookChanged),
+            name: .cafariLiteWallpaperDidChange,
+            object: nil)
+    }
+
+    @objc private func idleLookChanged() {
+        idleBackdrop.refresh()
     }
 
     @objc private func linksChanged() {
@@ -65,6 +82,13 @@ final class CarPlayHomeViewController: UIViewController {
     }
 
     private func buildInterface() {
+        idleBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(idleBackdrop)
+
+        homeScrim.backgroundColor = UIColor.black.withAlphaComponent(0.35)
+        homeScrim.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(homeScrim)
+
         sidebar = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
         sidebar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(sidebar)
@@ -113,6 +137,16 @@ final class CarPlayHomeViewController: UIViewController {
 
         sidebarWidth = sidebar.widthAnchor.constraint(equalToConstant: 96)
         NSLayoutConstraint.activate([
+            idleBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            idleBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            idleBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            idleBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            homeScrim.topAnchor.constraint(equalTo: view.topAnchor),
+            homeScrim.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            homeScrim.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            homeScrim.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
             sidebar.topAnchor.constraint(equalTo: view.topAnchor),
             sidebar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             sidebar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
