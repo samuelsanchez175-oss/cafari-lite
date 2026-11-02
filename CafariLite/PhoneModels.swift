@@ -17,8 +17,13 @@ struct SavedLink: Codable, Equatable {
   var starred: Bool
   var thumbStyle: String? = nil
   var durationLabel: String? = nil
+  var thumbImageURLString: String? = nil
 
   var url: URL? { URL(string: urlString) }
+  var thumbImageURL: URL? {
+    guard let thumbImageURLString, !thumbImageURLString.isEmpty else { return nil }
+    return URL(string: thumbImageURLString)
+  }
 
   /// The five rows on the Stitch Links screen.
   static let stitchRows: [SavedLink] = [
@@ -80,13 +85,46 @@ final class SavedLinkStore {
 
   func add(url: URL, title: String? = nil) {
     let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let resolved = if let trimmed, !trimmed.isEmpty {
-      trimmed
-    } else {
-      url.host() ?? url.absoluteString
+    let id = UUID()
+    var link = SavedLink(
+      id: id,
+      title: placeholderTitle(url: url, override: trimmed),
+      urlString: url.absoluteString,
+      starred: false)
+    if let videoID = BrowserViewController.youtubeID(for: url) {
+      link.thumbStyle = "youtube"
+      link.thumbImageURLString = YouTubeLinkMetadata.thumbnailURL(forVideoID: videoID).absoluteString
     }
-    links.insert(SavedLink(id: UUID(), title: resolved, urlString: url.absoluteString, starred: false), at: 0)
+    links.insert(link, at: 0)
     save()
+    if BrowserViewController.youtubeID(for: url) != nil {
+      Task { await enrichYouTubeLink(id: id, url: url) }
+    }
+  }
+
+  @MainActor
+  private func enrichYouTubeLink(id: UUID, url: URL) async {
+    guard let resolved = await YouTubeLinkMetadata.resolve(url: url),
+          let index = links.firstIndex(where: { $0.id == id }) else {
+      return
+    }
+    links[index].title = resolved.title
+    links[index].thumbImageURLString = resolved.thumbImageURL.absoluteString
+    links[index].durationLabel = resolved.durationLabel
+    links[index].thumbStyle = "youtube"
+    save()
+  }
+
+  private func placeholderTitle(url: URL, override: String?) -> String {
+    if let override, !override.isEmpty { return override }
+    if let videoID = BrowserViewController.youtubeID(for: url) {
+      return "YouTube · \(videoID)"
+    }
+    let host = url.host() ?? ""
+    if !host.isEmpty { return host }
+    let text = url.absoluteString
+    if text.count > 48 { return String(text.prefix(45)) + "…" }
+    return text
   }
 
   func toggleStar(_ id: UUID) {

@@ -605,7 +605,7 @@ private final class LinkRowCell: UITableViewCell {
 
   func fill(_ link: SavedLink, selecting: Bool, checked: Bool) {
     nameLabel.text = link.title
-    thumb.apply(style: Self.style(for: link), duration: link.durationLabel)
+    thumb.apply(style: Self.style(for: link), duration: link.durationLabel, imageURL: link.thumbImageURL)
     let symbol = link.starred ? "star.fill" : "star"
     let starImage = UIImage.SymbolConfiguration(pointSize: 16, weight: .regular)
     star.setImage(UIImage(systemName: symbol, withConfiguration: starImage), for: .normal)
@@ -619,6 +619,7 @@ private final class LinkRowCell: UITableViewCell {
     if let style = link.thumbStyle, !style.isEmpty { return style }
     let host = (link.url?.host() ?? "").lowercased()
     if link.urlString.contains("m3u8") { return "hls" }
+    if link.url.flatMap({ BrowserViewController.youtubeID(for: $0) }) != nil { return "youtube" }
     if host.contains("youtu") { return "web" }
     return "video"
   }
@@ -626,10 +627,13 @@ private final class LinkRowCell: UITableViewCell {
 
 private final class LinkThumbView: UIView {
   private let gradient = CAGradientLayer()
+  private let photo = UIImageView()
   private let caption = UILabel()
   private let icon = UIImageView()
   private let playCard = UIView()
   private let badge = UILabel()
+  private var imageTask: Task<Void, Never>?
+  private var imageToken = UUID()
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -638,6 +642,12 @@ private final class LinkThumbView: UIView {
     layer.borderColor = Taste.charcoal.withAlphaComponent(0.2).cgColor
     clipsToBounds = true
     layer.insertSublayer(gradient, at: 0)
+
+    photo.contentMode = .scaleAspectFill
+    photo.clipsToBounds = true
+    photo.isHidden = true
+    photo.translatesAutoresizingMaskIntoConstraints = false
+    insertSubview(photo, at: 0)
 
     caption.textAlignment = .center
     caption.numberOfLines = 2
@@ -668,6 +678,10 @@ private final class LinkThumbView: UIView {
     addSubview(badge)
 
     NSLayoutConstraint.activate([
+      photo.leadingAnchor.constraint(equalTo: leadingAnchor),
+      photo.trailingAnchor.constraint(equalTo: trailingAnchor),
+      photo.topAnchor.constraint(equalTo: topAnchor),
+      photo.bottomAnchor.constraint(equalTo: bottomAnchor),
       caption.centerXAnchor.constraint(equalTo: centerXAnchor),
       caption.centerYAnchor.constraint(equalTo: centerYAnchor),
       caption.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 4),
@@ -697,13 +711,27 @@ private final class LinkThumbView: UIView {
     gradient.frame = bounds
   }
 
-  func apply(style: String, duration: String?) {
+  func apply(style: String, duration: String?, imageURL: URL? = nil) {
+    imageTask?.cancel()
+    imageTask = nil
+    let token = UUID()
+    imageToken = token
+    photo.image = nil
+    photo.isHidden = true
     caption.isHidden = true
     icon.isHidden = true
     playCard.isHidden = true
     badge.isHidden = true
     gradient.isHidden = true
     switch style {
+    case "youtube":
+      backgroundColor = Taste.zinc
+      playCard.isHidden = false
+      showWash(bottomHeavy: false)
+      showDuration(duration)
+      if let imageURL {
+        loadPhoto(from: imageURL, token: token)
+      }
     case "kt789":
       backgroundColor = Taste.amberTile
       caption.isHidden = false
@@ -775,5 +803,22 @@ private final class LinkThumbView: UIView {
     badge.textColor = .white
     badge.backgroundColor = color
     badge.font = .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+  }
+
+  private func loadPhoto(from url: URL, token: UUID) {
+    imageTask = Task { @MainActor in
+      do {
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard !Task.isCancelled, imageToken == token,
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let image = UIImage(data: data) else {
+          return
+        }
+        photo.image = image
+        photo.isHidden = false
+      } catch {
+        Log.write("link thumb load fail \(url.absoluteString)")
+      }
+    }
   }
 }
