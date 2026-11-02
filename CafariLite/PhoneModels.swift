@@ -133,6 +133,25 @@ final class SavedLinkStore {
     save()
   }
 
+  func delete(id: UUID) {
+    links.removeAll { $0.id == id }
+    save()
+  }
+
+  func rename(id: UUID, title: String) {
+    guard let index = links.firstIndex(where: { $0.id == id }) else { return }
+    links[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    save()
+  }
+
+  func move(id: UUID, to destination: Int) {
+    guard let source = links.firstIndex(where: { $0.id == id }),
+          links.indices.contains(destination) else { return }
+    let link = links.remove(at: source)
+    links.insert(link, at: destination)
+    save()
+  }
+
   private func save() {
     if let data = try? JSONEncoder().encode(links) {
       try? data.write(to: fileURL, options: .atomic)

@@ -68,6 +68,18 @@ enum Settings {
   /// Hide the car toolbar and use the whole panel, including the sidebar inset.
   @UserDefault(key: "fullScreenCar", defaultValue: false)
   static var fullScreenCar: Bool
+
+  /// EQ preset label (see `AudioEQPreset`). Playback engine hook deferred.
+  static var audioEQPreset: AudioEQPreset {
+    get { AudioEQPreset.load() }
+    set { AudioEQPreset.save(newValue) }
+  }
+
+  @UserDefault(key: SettingsKeys.spatialAudioEnabled, defaultValue: false)
+  static var spatialAudioEnabled: Bool
+
+  @UserDefault(key: SettingsKeys.libraryVerboseLogging, defaultValue: true)
+  static var libraryVerboseLogging: Bool
 }
 
 extension Notification.Name {

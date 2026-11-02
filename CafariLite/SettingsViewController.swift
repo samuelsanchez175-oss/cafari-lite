@@ -1,17 +1,27 @@
+import Photos
 import UIKit
 
 final class SettingsViewController: UITableViewController {
     private enum Section: Int, CaseIterable {
         case appearance
         case ambient
+        case audio
+        case youtube
+        case phoneAndCar
         case wallpaper
         case display
         case playback
+        case shortcuts
         case diagnostics
         case legal
     }
 
     private let appearanceControl = UISegmentedControl(items: ["System", "Light", "Dark"])
+    private var carObservers: [NSObjectProtocol] = []
+
+    deinit {
+        carObservers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
 
     init() {
         super.init(style: .insetGrouped)
@@ -50,10 +60,24 @@ final class SettingsViewController: UITableViewController {
 
         appearanceControl.selectedSegmentIndex = min(max(Settings.appearanceIndex, 0), 2)
         appearanceControl.addAction(UIAction { [weak self] _ in self?.appearanceChanged() }, for: .valueChanged)
+
+        let center = NotificationCenter.default
+        carObservers = [
+            center.addObserver(forName: .cafariLiteCarConnected, object: nil, queue: .main) { [weak self] _ in
+                self?.tableView.reloadData()
+            },
+            center.addObserver(forName: .cafariLiteCarDisconnected, object: nil, queue: .main) { [weak self] _ in
+                self?.tableView.reloadData()
+            },
+            center.addObserver(forName: .cafariLitePlayModeChanged, object: nil, queue: .main) { [weak self] _ in
+                self?.tableView.reloadSections(IndexSet(integer: Section.phoneAndCar.rawValue), with: .none)
+            },
+        ]
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        YouTubeAccountManager.shared.checkStatus()
         tableView.reloadData()
     }
 
@@ -65,9 +89,13 @@ final class SettingsViewController: UITableViewController {
         guard let section = Section(rawValue: section) else { return 0 }
         return switch section {
         case .appearance, .ambient: 1
+        case .audio: 2
+        case .youtube: YouTubeAccountManager.shared.isSignedIn ? 2 : 1
+        case .phoneAndCar: 4
         case .wallpaper: 2
         case .display, .playback: 5
-        case .diagnostics: 3
+        case .shortcuts: 2
+        case .diagnostics: 6
         case .legal: 2
         }
     }
@@ -77,9 +105,13 @@ final class SettingsViewController: UITableViewController {
         return switch section {
         case .appearance: "APPEARANCE"
         case .ambient: "AMBIENT"
+        case .audio: "AUDIO & ACOUSTIC PROFILES"
+        case .youtube: "YOUTUBE ACCOUNT"
+        case .phoneAndCar: "PHONE & CAR"
         case .wallpaper: "WALLPAPER & IDLE"
         case .display: "CARPLAY DISPLAY"
         case .playback: "PLAYBACK & AUDIO"
+        case .shortcuts: "SHARE & SHORTCUTS"
         case .diagnostics: "DIAGNOSTICS & LOGS"
         case .legal: "LEGAL"
         }
@@ -90,6 +122,14 @@ final class SettingsViewController: UITableViewController {
         return switch section {
         case .ambient:
             "Projects dynamic blue ambient lighting behind the dock."
+        case .audio:
+            "Presets are saved on this device. Cafari Lite does not apply EQ or spatial DSP to playback yet (Reels parity at preference level)."
+        case .youtube:
+            "Signed-in sessions use the same WebKit store as the car browser, so subscriptions and history appear on CarPlay after reload."
+        case .phoneAndCar:
+            "Same controls as Links — photos for Library, streaming mode, and play-all on the car display."
+        case .shortcuts:
+            "Share from Safari or YouTube into Cafari Lite. Paste the prompt in Shortcuts under Describe a shortcut."
         case .wallpaper:
             "Choose what fills the car home screen behind your starred links. Full-Screen Mode only affects the in-car browser toolbar."
         case .display:
@@ -125,6 +165,58 @@ final class SettingsViewController: UITableViewController {
                 Settings.ambientLightSync = isOn
                 Log.write("settings Ambient Light Sync=\(isOn)")
                 NotificationCenter.default.post(name: .cafariLiteSettingsChanged, object: nil)
+            }
+            return cell
+        case .audio:
+            if indexPath.row == 0 {
+                let cell = tableView.dequeueReusableCell(withIdentifier: SettingsDetailCell.reuseIdentifier, for: indexPath) as! SettingsDetailCell
+                cell.configure(title: "Equalizer Preset", detail: Settings.audioEQPreset.rawValue)
+                return cell
+            }
+            let cell = tableView.dequeueReusableCell(withIdentifier: SettingsSwitchCell.reuseIdentifier, for: indexPath) as! SettingsSwitchCell
+            cell.configure(
+                title: "Spatial Surround Audio",
+                subtitle: "Immersive cabin profile",
+                isOn: Settings.spatialAudioEnabled
+            ) { isOn in
+                Settings.spatialAudioEnabled = isOn
+                Log.write("settings Spatial Surround Audio=\(isOn)")
+                NotificationCenter.default.post(name: .cafariLiteSettingsChanged, object: nil)
+            }
+            return cell
+        case .youtube:
+            if YouTubeAccountManager.shared.isSignedIn {
+                if indexPath.row == 0 {
+                    let cell = tableView.dequeueReusableCell(withIdentifier: SettingsDetailCell.reuseIdentifier, for: indexPath) as! SettingsDetailCell
+                    cell.configure(title: "YouTube Account", detail: "Signed In")
+                    cell.accessoryType = .none
+                    return cell
+                }
+                let cell = tableView.dequeueReusableCell(withIdentifier: "BasicCell", for: indexPath)
+                var content = cell.defaultContentConfiguration()
+                content.text = "Sign Out of YouTube"
+                content.textProperties.color = .systemRed
+                cell.contentConfiguration = content
+                cell.accessoryType = .none
+                return cell
+            }
+            let cell = tableView.dequeueReusableCell(withIdentifier: SettingsDetailCell.reuseIdentifier, for: indexPath) as! SettingsDetailCell
+            cell.configure(title: "YouTube Account", detail: "Sign In")
+            return cell
+        case .phoneAndCar:
+            let cell = tableView.dequeueReusableCell(withIdentifier: SettingsDetailCell.reuseIdentifier, for: indexPath) as! SettingsDetailCell
+            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            switch indexPath.row {
+            case 0:
+                cell.configure(title: "Photos Access", detail: PhotosAccessSettings.statusLabel(for: status))
+            case 1:
+                cell.configure(title: "Car Display", detail: CarSessionState.displayHint)
+                cell.accessoryType = .none
+                cell.selectionStyle = .none
+            case 2:
+                cell.configure(title: "YouTube on Car", detail: youtubeModeLabel(PhonePlayback.shared.mode))
+            default:
+                cell.configure(title: "Play All on Car", detail: SavedLinksPlayback.playAllDetail())
             }
             return cell
         case .wallpaper:
@@ -191,15 +283,41 @@ final class SettingsViewController: UITableViewController {
                 Log.write("settings \(row.0)=\(isOn)")
             }
             return cell
-        case .diagnostics:
+        case .shortcuts:
             let cell = tableView.dequeueReusableCell(withIdentifier: SettingsDetailCell.reuseIdentifier, for: indexPath) as! SettingsDetailCell
-            let rows = [
-                ("Playback errors", "\(SessionCounts.playbackErrorCount) this session"),
-                ("Car Action Log", "\(SessionCounts.carActionCount) events"),
-                ("Player Bug Catcher", "\(SessionCounts.playerFaultCount) faults")
-            ]
-            let row = rows[indexPath.row]
-            cell.configure(title: row.0, detail: row.1)
+            if indexPath.row == 0 {
+                cell.configure(title: "Create Shortcut", detail: "Copy prompt")
+            } else {
+                cell.configure(title: "Add to Action Button", detail: "Side button")
+            }
+            return cell
+        case .diagnostics:
+            if indexPath.row == 4 {
+                let cell = tableView.dequeueReusableCell(withIdentifier: SettingsSwitchCell.reuseIdentifier, for: indexPath) as! SettingsSwitchCell
+                cell.configure(
+                    title: "Verbose library logging",
+                    subtitle: "library-status.txt + in-app trace",
+                    isOn: Settings.libraryVerboseLogging
+                ) { isOn in
+                    Settings.libraryVerboseLogging = isOn
+                    Log.write("settings library verbose=\(isOn)")
+                }
+                return cell
+            }
+            let cell = tableView.dequeueReusableCell(withIdentifier: SettingsDetailCell.reuseIdentifier, for: indexPath) as! SettingsDetailCell
+            switch indexPath.row {
+            case 0:
+                cell.configure(title: "Playback errors", detail: "\(SessionCounts.playbackErrorCount) this session")
+            case 1:
+                cell.configure(title: "Car Action Log", detail: "\(SessionCounts.carActionCount) events")
+            case 2:
+                cell.configure(title: "Player Bug Catcher", detail: "\(SessionCounts.playerFaultCount) faults")
+            case 3:
+                let ready = CarPlayEntitlementDoctor.shared.lastReport?.carPlayReady ?? false
+                cell.configure(title: "CarPlay signing", detail: ready ? "Entitled" : "Check")
+            default:
+                cell.configure(title: "Library log", detail: "\(LibraryTrace.shared.events.count) events")
+            }
             return cell
         case .legal:
             let cell = tableView.dequeueReusableCell(withIdentifier: "BasicCell", for: indexPath)
@@ -217,6 +335,42 @@ final class SettingsViewController: UITableViewController {
         guard let section = Section(rawValue: indexPath.section) else { return }
 
         switch section {
+        case .audio:
+            if indexPath.row == 0 {
+                presentEQPicker()
+            }
+        case .youtube:
+            if YouTubeAccountManager.shared.isSignedIn {
+                if indexPath.row == 1 {
+                    confirmYouTubeSignOut()
+                }
+            } else {
+                Log.write("settings youtube sign in")
+                let signIn = YouTubeSignInController()
+                signIn.modalPresentationStyle = .formSheet
+                present(signIn, animated: true)
+            }
+        case .phoneAndCar:
+            switch indexPath.row {
+            case 0:
+                PhotosAccessSettings.handle(from: self)
+                tableView.reloadRows(at: [IndexPath(row: 0, section: Section.phoneAndCar.rawValue)], with: .none)
+            case 1:
+                break
+            case 2:
+                presentYouTubeModePicker()
+            default:
+                playAllFromSettings()
+            }
+        case .shortcuts:
+            if indexPath.row == 0 {
+                ShortcutsSupport.copyPromptAndOpenShortcuts { [weak self] message in
+                    self?.showNotice(message)
+                }
+            } else {
+                let help = UINavigationController(rootViewController: ActionButtonHelpViewController())
+                present(help, animated: true)
+            }
         case .wallpaper:
             if indexPath.row == 0 {
                 Log.write("settings open wallpaper hub")
@@ -228,13 +382,24 @@ final class SettingsViewController: UITableViewController {
                 present(setup, animated: true)
             }
         case .diagnostics:
-            let titles = ["Playback errors", "Car Action Log", "Player Bug Catcher"]
-            let title = titles[indexPath.row]
-            let slice = LogSlice(title: title)
-            let count = slice.map { Log.lines(for: $0).count } ?? 0
-            Log.write("settings diagnostics \(title) lines=\(count)")
-            let viewer = UINavigationController(rootViewController: SettingsLogController(pageTitle: title))
-            present(viewer, animated: true)
+            switch indexPath.row {
+            case 0, 1, 2:
+                let titles = ["Playback errors", "Car Action Log", "Player Bug Catcher"]
+                let title = titles[indexPath.row]
+                let slice = LogSlice(title: title)
+                let count = slice.map { Log.lines(for: $0).count } ?? 0
+                Log.write("settings diagnostics \(title) lines=\(count)")
+                let viewer = UINavigationController(rootViewController: SettingsLogController(pageTitle: title))
+                present(viewer, animated: true)
+            case 3:
+                let panel = UINavigationController(rootViewController: CarPlaySigningViewController())
+                present(panel, animated: true)
+            case 4:
+                break
+            default:
+                let viewer = UINavigationController(rootViewController: LibraryTraceViewController())
+                present(viewer, animated: true)
+            }
         case .legal:
             let title = indexPath.row == 0 ? "Privacy Policy" : "Terms of Service"
             Log.write("settings legal \(title)")
@@ -247,6 +412,81 @@ final class SettingsViewController: UITableViewController {
         default:
             break
         }
+    }
+
+    private func presentEQPicker() {
+        let sheet = UIAlertController(title: "Equalizer Preset", message: nil, preferredStyle: .actionSheet)
+        for preset in AudioEQPreset.allCases {
+            sheet.addAction(UIAlertAction(title: preset.rawValue, style: .default) { [weak self] _ in
+                Settings.audioEQPreset = preset
+                Log.write("settings EQ preset \(preset.rawValue)")
+                NotificationCenter.default.post(name: .cafariLiteSettingsChanged, object: nil)
+                self?.tableView.reloadData()
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let popover = sheet.popoverPresentationController,
+           let cell = tableView.cellForRow(at: IndexPath(row: 0, section: Section.audio.rawValue)) {
+            popover.sourceView = cell
+            popover.sourceRect = cell.bounds
+        }
+        present(sheet, animated: true)
+    }
+
+    private func confirmYouTubeSignOut() {
+        let alert = UIAlertController(
+            title: "Sign Out of YouTube?",
+            message: "Clears Google and YouTube cookies from this app. The car browser reloads on next open.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Sign Out", style: .destructive) { [weak self] _ in
+            YouTubeAccountManager.shared.signOut()
+            self?.tableView.reloadData()
+        })
+        present(alert, animated: true)
+    }
+
+    private func youtubeModeLabel(_ mode: PlayMode) -> String {
+        switch mode {
+        case .stream: "Stream"
+        case .webOnCar: "Web on car"
+        case .mirror: "Mirror"
+        }
+    }
+
+    private func presentYouTubeModePicker() {
+        let sheet = UIAlertController(title: "YouTube on Car", message: nil, preferredStyle: .actionSheet)
+        for mode in [PlayMode.stream, .webOnCar, .mirror] {
+            sheet.addAction(UIAlertAction(title: youtubeModeLabel(mode), style: .default) { [weak self] _ in
+                PhonePlayback.shared.mode = mode
+                Log.write("settings youtube mode \(mode.rawValue)")
+                self?.tableView.reloadRows(at: [IndexPath(row: 2, section: Section.phoneAndCar.rawValue)], with: .none)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let popover = sheet.popoverPresentationController,
+           let cell = tableView.cellForRow(at: IndexPath(row: 2, section: Section.phoneAndCar.rawValue)) {
+            popover.sourceView = cell
+            popover.sourceRect = cell.bounds
+        }
+        present(sheet, animated: true)
+    }
+
+    private func playAllFromSettings() {
+        guard !SavedLinkStore.shared.links.isEmpty else {
+            showNotice("Save a link on Links first.")
+            return
+        }
+        SavedLinksPlayback.playAllOnCar()
+        showNotice("Sending saved queue to the car display…")
+        tableView.reloadRows(at: [IndexPath(row: 3, section: Section.phoneAndCar.rawValue)], with: .none)
+    }
+
+    private func showNotice(_ message: String) {
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 
     private func appearanceChanged() {
