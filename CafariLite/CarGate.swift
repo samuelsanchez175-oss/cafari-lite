@@ -24,6 +24,24 @@ final class CarGate: NSObject, CLLocationManagerDelegate {
   static let stateChanged = Notification.Name("CafariLiteCarGateChanged")
 
   private(set) var isMoving = false
+
+  var locationAuthorizationLabel: String {
+    switch manager.authorizationStatus {
+    case .authorizedAlways, .authorizedWhenInUse: "On"
+    case .denied: "Denied"
+    case .restricted: "Restricted"
+    case .notDetermined: "Not asked"
+    @unknown default: "Unknown"
+    }
+  }
+
+  var isLocationUsable: Bool {
+    switch manager.authorizationStatus {
+    case .authorizedAlways, .authorizedWhenInUse: true
+    default: false
+    }
+  }
+
   @ObservationIgnored private let manager = CLLocationManager()
   @ObservationIgnored private var updatesTask: Task<Void, Never>?
   @ObservationIgnored private var running = false

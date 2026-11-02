@@ -35,6 +35,8 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
   private var wasSigningIn = false
   private var loggedCarLayout = false
   private var drivingCover: UIView?
+  private var gateHUD: UILabel?
+  private var sidebarOverlay: UIView?
   private var loggedCarPlaying = false
   private let carDim = UIView()
   private let playbackRelay = CarPlaybackRelay()
@@ -150,6 +152,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
         name: .cafariLiteCarRemoteCommand, object: nil)
       if Settings.playOnlyWhenParked { CarGate.shared.start() }
       installCarDim()
+      installVerificationOverlays()
     }
   }
 
@@ -405,11 +408,94 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
       CarGate.shared.stop()
     }
     drivingStateChanged()
+    refreshVerificationOverlays()
   }
 
   @objc private func drivingStateChanged() {
     let blocked = Settings.playOnlyWhenParked && CarGate.shared.isMoving
     blocked ? showDrivingCover() : hideDrivingCover()
+    refreshGateHUD()
+  }
+
+  private func installVerificationOverlays() {
+    let hud = UILabel()
+    hud.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
+    hud.textColor = .white
+    hud.backgroundColor = UIColor.black.withAlphaComponent(0.62)
+    hud.layer.cornerRadius = 6
+    hud.clipsToBounds = true
+    hud.numberOfLines = 0
+    hud.textAlignment = .left
+    hud.isHidden = true
+    hud.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(hud)
+    NSLayoutConstraint.activate([
+      hud.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
+      hud.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -4),
+      hud.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.55),
+    ])
+    gateHUD = hud
+
+    let overlay = UIView()
+    overlay.isUserInteractionEnabled = false
+    overlay.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.22)
+    overlay.layer.borderColor = UIColor.systemOrange.cgColor
+    overlay.layer.borderWidth = 2
+    overlay.isHidden = true
+    overlay.translatesAutoresizingMaskIntoConstraints = true
+    view.addSubview(overlay)
+    sidebarOverlay = overlay
+
+    refreshVerificationOverlays()
+  }
+
+  private func refreshVerificationOverlays() {
+    refreshGateHUD()
+    layoutSidebarOverlay()
+  }
+
+  private func refreshGateHUD() {
+    guard !showsStatus, let hud = gateHUD else { return }
+    guard Settings.showParkedGateHUD else {
+      hud.isHidden = true
+      return
+    }
+    let gateOn = Settings.playOnlyWhenParked
+    let loc = CarGate.shared.locationAuthorizationLabel
+    let moving = CarGate.shared.isMoving
+    let cover = drivingCover != nil
+    let state: String = if !gateOn {
+      "Gate off"
+    } else if !CarGate.shared.isLocationUsable {
+      "Gate · loc \(loc) · parked"
+    } else {
+      moving ? "Gate · moving" : "Gate · parked"
+    }
+    hud.text = "  \(state)\n  Cover: \(cover ? "on" : "off")  "
+    hud.isHidden = false
+    view.bringSubviewToFront(hud)
+    if let bar = floatingBar { view.bringSubviewToFront(bar) }
+  }
+
+  private func layoutSidebarOverlay() {
+    guard !showsStatus, let overlay = sidebarOverlay else { return }
+    let show = Settings.showSidebarSafeAreaOverlay
+      && Settings.avoidSidebar
+      && !Settings.fullScreenCar
+    guard show else {
+      overlay.isHidden = true
+      return
+    }
+    let inset = view.safeAreaInsets.left
+    guard inset > 0.5 else {
+      overlay.isHidden = true
+      return
+    }
+    overlay.frame = CGRect(x: 0, y: 0, width: inset, height: view.bounds.height)
+    overlay.isHidden = false
+    view.bringSubviewToFront(overlay)
+    if let hud = gateHUD, !hud.isHidden { view.bringSubviewToFront(hud) }
+    if let bar = floatingBar { view.bringSubviewToFront(bar) }
   }
 
   private func showDrivingCover() {
@@ -511,6 +597,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
           let screen = view.window?.windowScene?.screen else {
       webView.transform = .identity
       webView.frame = bounds
+      layoutSidebarOverlay()
       return
     }
     let native = screen.nativeBounds.size
@@ -525,6 +612,8 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
     webView.transform = CGAffineTransform(scaleX: bounds.width / target.width,
                                           y: bounds.height / target.height)
     webView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+    CarSessionState.noteCarNativeSize(target)
+    layoutSidebarOverlay()
     if !loggedCarLayout {
       loggedCarLayout = true
       Log.write("car layout native=\(target) area=\(bounds) "

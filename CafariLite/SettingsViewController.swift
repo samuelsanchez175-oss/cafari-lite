@@ -13,6 +13,7 @@ final class SettingsViewController: UITableViewController {
         case playback
         case shortcuts
         case diagnostics
+        case advanced
         case legal
     }
 
@@ -96,6 +97,7 @@ final class SettingsViewController: UITableViewController {
         case .display, .playback: 5
         case .shortcuts: 2
         case .diagnostics: 6
+        case .advanced: 6
         case .legal: 2
         }
     }
@@ -113,6 +115,7 @@ final class SettingsViewController: UITableViewController {
         case .playback: "PLAYBACK & AUDIO"
         case .shortcuts: "SHARE & SHORTCUTS"
         case .diagnostics: "DIAGNOSTICS & LOGS"
+        case .advanced: "ADVANCED"
         case .legal: "LEGAL"
         }
     }
@@ -136,6 +139,8 @@ final class SettingsViewController: UITableViewController {
             "Wallpaper Shortcuts shows Maps, Music, Phone, and Dashboard next to your starred links."
         case .diagnostics:
             "Capture real-time playback events and UI states."
+        case .advanced:
+            "Verification and debug tools from the toolkit. HUDs stay off until you enable them."
         case .legal:
             "Cafari replaces Reels Sync. One CarPlay app on this device: com.samuelsanchez.ytos27."
         default:
@@ -293,6 +298,40 @@ final class SettingsViewController: UITableViewController {
                 cell.configure(title: "Add to Action Button", detail: "Side button")
             }
             return cell
+        case .advanced:
+            if indexPath.row == 2 || indexPath.row == 3 || indexPath.row == 4 {
+                let cell = tableView.dequeueReusableCell(withIdentifier: SettingsSwitchCell.reuseIdentifier, for: indexPath) as! SettingsSwitchCell
+                let rows: [(String, String?, Bool, (Bool) -> Void)] = [
+                    ("Show parked-gate HUD", "Car browser overlay", Settings.showParkedGateHUD, {
+                        Settings.showParkedGateHUD = $0
+                        NotificationCenter.default.post(name: .cafariLiteSettingsChanged, object: nil)
+                    }),
+                    ("Show Links status HUD", "Mode, queue, last send", Settings.showLinksStatusHUD, {
+                        Settings.showLinksStatusHUD = $0
+                        NotificationCenter.default.post(name: .cafariLiteSettingsChanged, object: nil)
+                    }),
+                    ("Sidebar safe-area overlay", "Car WebView sidebar inset", Settings.showSidebarSafeAreaOverlay, {
+                        Settings.showSidebarSafeAreaOverlay = $0
+                        NotificationCenter.default.post(name: .cafariLiteSettingsChanged, object: nil)
+                    }),
+                ]
+                let row = rows[indexPath.row - 2]
+                cell.configure(title: row.0, subtitle: row.1, isOn: row.2) { isOn in
+                    row.3(isOn)
+                    Log.write("settings advanced \(row.0)=\(isOn)")
+                }
+                return cell
+            }
+            let cell = tableView.dequeueReusableCell(withIdentifier: SettingsDetailCell.reuseIdentifier, for: indexPath) as! SettingsDetailCell
+            switch indexPath.row {
+            case 0:
+                cell.configure(title: "Pre-drive checklist", detail: "Open")
+            case 1:
+                cell.configure(title: "Test link metadata", detail: "Paste URL")
+            default:
+                cell.configure(title: "YouTube resolve diagnostics", detail: "Coming soon")
+            }
+            return cell
         case .diagnostics:
             if indexPath.row == 4 {
                 let cell = tableView.dequeueReusableCell(withIdentifier: SettingsSwitchCell.reuseIdentifier, for: indexPath) as! SettingsSwitchCell
@@ -382,6 +421,17 @@ final class SettingsViewController: UITableViewController {
                 let setup = WallpaperHubFactory.makeSetupSheet()
                 setup.modalPresentationStyle = .formSheet
                 present(setup, animated: true)
+            }
+        case .advanced:
+            switch indexPath.row {
+            case 0:
+                present(UINavigationController(rootViewController: PreDriveChecklistViewController()), animated: true)
+            case 1:
+                present(UINavigationController(rootViewController: LinkMetadataTestViewController()), animated: true)
+            case 5:
+                present(UINavigationController(rootViewController: YouTubeResolveDiagnosticsViewController()), animated: true)
+            default:
+                break
             }
         case .diagnostics:
             switch indexPath.row {

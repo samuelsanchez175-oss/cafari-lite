@@ -32,7 +32,7 @@ final class CarPlaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.makeKeyAndVisible()
     self.window = window
     Log.write("car scene connected \(window.bounds.size)")
-    CarSessionState.setConnected(true)
+    CarSessionState.setConnected(true, windowSize: window.bounds.size)
     NotificationCenter.default.post(name: .cafariLiteCarConnected, object: nil)
   }
 

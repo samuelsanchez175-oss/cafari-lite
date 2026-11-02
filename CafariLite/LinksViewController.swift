@@ -59,6 +59,7 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
   private weak var chromePaste: UIButton?
   private weak var chromeCapsule: UIView?
   private weak var chromeModes: UIStackView?
+  private var linksStatusHUD: UILabel?
 
   deinit {
     let center = NotificationCenter.default
@@ -297,15 +298,24 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     observers = [
       center.addObserver(forName: .cafariLiteCarConnected, object: nil, queue: .main) { [weak self] _ in
         self?.refreshPill()
+        self?.refreshLinksStatusHUD()
       },
       center.addObserver(forName: .cafariLiteCarDisconnected, object: nil, queue: .main) { [weak self] _ in
         self?.refreshPill()
+        self?.refreshLinksStatusHUD()
       },
       center.addObserver(forName: .cafariLiteLinksChanged, object: nil, queue: .main) { [weak self] _ in
         self?.refreshList()
       },
       center.addObserver(forName: .cafariLitePlayModeChanged, object: nil, queue: .main) { [weak self] _ in
         self?.refreshModes()
+        self?.refreshLinksStatusHUD()
+      },
+      center.addObserver(forName: .cafariLiteSettingsChanged, object: nil, queue: .main) { [weak self] _ in
+        self?.refreshLinksStatusHUD()
+      },
+      center.addObserver(forName: .cafariLiteCarSendHintChanged, object: nil, queue: .main) { [weak self] _ in
+        self?.refreshLinksStatusHUD()
       },
     ]
     registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in
@@ -314,7 +324,46 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     }
     applyChrome()
     refreshPill()
+    installLinksStatusHUD()
     observeState()
+  }
+
+  private func installLinksStatusHUD() {
+    let hud = UILabel()
+    hud.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
+    hud.textColor = Taste.charcoal.withAlphaComponent(0.85)
+    hud.backgroundColor = Taste.surface.withAlphaComponent(0.92)
+    hud.layer.cornerRadius = 8
+    hud.layer.borderWidth = 1
+    hud.layer.borderColor = Taste.whisper.cgColor
+    hud.clipsToBounds = true
+    hud.numberOfLines = 0
+    hud.isHidden = true
+    hud.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(hud)
+    NSLayoutConstraint.activate([
+      hud.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+      hud.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+      hud.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+    ])
+    linksStatusHUD = hud
+    refreshLinksStatusHUD()
+  }
+
+  private func refreshLinksStatusHUD() {
+    guard let hud = linksStatusHUD else { return }
+    guard Settings.showLinksStatusHUD else {
+      hud.isHidden = true
+      return
+    }
+    let playback = PhonePlayback.shared
+    let mode = titleFor(playback.mode)
+    let qCount = playback.queue.isEmpty ? store.links.count : playback.queue.count
+    let index = qCount > 0 ? min(playback.queueIndex + 1, qCount) : 0
+    let car = CarSessionState.isConnected ? "car ✓" : "car —"
+    hud.text = "  \(mode) · \(index)/\(max(qCount, store.links.count)) · \(car)\n  Last send: \(CarSender.lastSendHint)  "
+    hud.isHidden = false
+    view.bringSubviewToFront(hud)
   }
 
   private func applyChrome() {
@@ -334,6 +383,7 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     withObservationTracking {
       refreshModes()
       refreshList()
+      refreshLinksStatusHUD()
     } onChange: { [weak self] in
       Task { @MainActor in
         self?.observeState()

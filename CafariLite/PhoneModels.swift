@@ -244,6 +244,8 @@ enum LinkURL {
 }
 
 enum CarSender {
+  private(set) static var lastSendHint = "None yet"
+
   static var carIsConnected: Bool {
     UIApplication.shared.connectedScenes.contains { scene in
       scene.session.role == cafariLiteCarPlayRole
@@ -253,18 +255,34 @@ enum CarSender {
   /// Web on car and Mirror hand the page across.
   static func sendPage(_ url: URL) {
     SessionCounts.carAction()
+    lastSendHint = "Page · \(shortURL(url))"
     Log.write("sendPage \(url.absoluteString)")
     NotificationCenter.default.post(
       name: .cafariLiteSendToCar, object: nil, userInfo: ["url": url])
+    NotificationCenter.default.post(name: .cafariLiteCarSendHintChanged, object: nil)
   }
 
   /// Stream hands the bare player when the link is a YouTube video.
   static func sendDirect(_ url: URL) {
     SessionCounts.carAction()
     let destination = BrowserViewController.playerURL(for: url) ?? url
+    lastSendHint = "Stream · \(shortURL(destination))"
     Log.write("sendDirect \(url.absoluteString) -> \(destination.absoluteString)")
     NotificationCenter.default.post(
       name: .cafariLiteSendToCar, object: nil, userInfo: ["url": destination])
+    NotificationCenter.default.post(name: .cafariLiteCarSendHintChanged, object: nil)
+  }
+
+  private static func shortURL(_ url: URL) -> String {
+    let host = url.host() ?? "link"
+    if let id = BrowserViewController.youtubeID(for: url) {
+      return "\(host) · \(id)"
+    }
+    let path = url.path
+    if path.count > 24 {
+      return host + String(path.prefix(20)) + "…"
+    }
+    return host + path
   }
 
   @discardableResult
@@ -277,4 +295,8 @@ enum CarSender {
     }
     return true
   }
+}
+
+extension Notification.Name {
+  static let cafariLiteCarSendHintChanged = Notification.Name("CafariLiteCarSendHintChanged")
 }

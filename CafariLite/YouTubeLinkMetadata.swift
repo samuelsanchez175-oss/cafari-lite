@@ -13,6 +13,56 @@ enum YouTubeLinkMetadata {
     URL(string: "https://img.youtube.com/vi/\(id)/mqdefault.jpg")!
   }
 
+  struct DiagnosticResult: Sendable {
+    var resolved: Resolved?
+    var oEmbedMilliseconds: Int?
+    var durationMilliseconds: Int?
+    var totalMilliseconds: Int
+    var errorNotes: [String]
+  }
+
+  static func resolveDiagnostic(url: URL) async -> DiagnosticResult {
+    let started = Date()
+    guard let videoID = BrowserViewController.youtubeID(for: url) else {
+      return DiagnosticResult(
+        resolved: nil,
+        oEmbedMilliseconds: nil,
+        durationMilliseconds: nil,
+        totalMilliseconds: ms(since: started),
+        errorNotes: ["Not a recognized YouTube URL"])
+    }
+
+    var errors: [String] = []
+    let fallbackThumb = thumbnailURL(forVideoID: videoID)
+    let fallbackTitle = "YouTube · \(videoID)"
+
+    let oEmbedStart = Date()
+    let embed = await fetchOEmbed(pageURL: url)
+    let oEmbedMS = ms(since: oEmbedStart)
+    if embed == nil { errors.append("oEmbed failed or non-2xx") }
+
+    let durationStart = Date()
+    let seconds = await fetchDurationSeconds(videoID: videoID)
+    let durationMS = ms(since: durationStart)
+    if seconds == nil { errors.append("Duration scrape missed lengthSeconds") }
+
+    let title = embed?.title.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? fallbackTitle
+    let thumb = embed?.thumbnailURL ?? fallbackThumb
+    let durationLabel = seconds.map(formatDuration(seconds:))
+    let resolved = Resolved(title: title, thumbImageURL: thumb, durationLabel: durationLabel)
+
+    return DiagnosticResult(
+      resolved: resolved,
+      oEmbedMilliseconds: oEmbedMS,
+      durationMilliseconds: durationMS,
+      totalMilliseconds: ms(since: started),
+      errorNotes: errors)
+  }
+
+  private static func ms(since start: Date) -> Int {
+    Int(Date().timeIntervalSince(start) * 1000)
+  }
+
   static func resolve(url: URL) async -> Resolved? {
     guard let videoID = BrowserViewController.youtubeID(for: url) else { return nil }
     let fallbackThumb = thumbnailURL(forVideoID: videoID)

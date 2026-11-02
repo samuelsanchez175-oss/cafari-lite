@@ -80,6 +80,18 @@ enum Settings {
 
   @UserDefault(key: SettingsKeys.libraryVerboseLogging, defaultValue: true)
   static var libraryVerboseLogging: Bool
+
+  /// Car browser overlay: gate state and driving cover (Advanced).
+  @UserDefault(key: "showParkedGateHUD", defaultValue: false)
+  static var showParkedGateHUD: Bool
+
+  /// Links screen overlay: mode, queue, car connection (Advanced).
+  @UserDefault(key: "showLinksStatusHUD", defaultValue: false)
+  static var showLinksStatusHUD: Bool
+
+  /// Car WebView: highlight sidebar safe-area inset (Advanced).
+  @UserDefault(key: "showSidebarSafeAreaOverlay", defaultValue: false)
+  static var showSidebarSafeAreaOverlay: Bool
 }
 
 extension Notification.Name {

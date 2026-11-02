@@ -19,8 +19,20 @@ struct WallpaperHubView: View {
     @State private var dragBase: CGSize = .zero
     @State private var applyFlash = false
     @State private var isPinchingPreview = false
+    @State private var carMetricsNonce = 0
 
-    private let carAspect = WallpaperPreviewLayout.defaultCarAspect
+    private var carAspect: CGFloat {
+        CarSessionState.liveCarAspect ?? WallpaperPreviewLayout.defaultCarAspect
+    }
+
+    private var previewMetricsLine: String {
+        _ = carMetricsNonce
+        let live = CarSessionState.liveCarAspect != nil
+        let aspectText = String(format: "%.2f", carAspect)
+        let source = live ? "live car panel" : "default 16:9"
+        let size = CarSessionState.isConnected ? " Car window: \(CarSessionState.carSizeHint)." : ""
+        return "Preview aspect \(aspectText) (\(source)).\(size)"
+    }
 
     var body: some View {
         List {
@@ -31,8 +43,11 @@ struct WallpaperHubView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.black)
             } footer: {
-                Text("Yellow box matches the car screen shape. Pinch and drag wallpaper or clips before Apply.")
-                    .font(.footnote)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(previewMetricsLine)
+                    Text("Yellow box matches the car screen shape. Pinch and drag wallpaper or clips before Apply.")
+                }
+                .font(.footnote)
             }
 
             Section {
@@ -79,6 +94,12 @@ struct WallpaperHubView: View {
         .navigationTitle(navigationTitleText)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { restoreCropForCurrentLook() }
+        .onReceive(NotificationCenter.default.publisher(for: .cafariLiteCarConnected)) { _ in
+            carMetricsNonce += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cafariLiteCarDisconnected)) { _ in
+            carMetricsNonce += 1
+        }
         .onChange(of: idleLook.selectedLook) { _, _ in restoreCropForCurrentLook() }
         .onChange(of: pickerItem) { _, newItem in
             guard let newItem else { return }
