@@ -22,7 +22,7 @@ struct ControllerClip {
 
   init(link: SavedLink) {
     title = link.title
-    posterURL = nil
+    posterURL = link.thumbImageURL
     pageURL = link.url
     duration = ControllerClip.seconds(from: link.durationLabel)
     assetLocalIdentifier = nil
