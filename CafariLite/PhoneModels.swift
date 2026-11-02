@@ -182,7 +182,7 @@ final class PhonePlayback {
   func remember(title: String, url: URL?) {
     currentTitle = title
     currentURL = url
-    persistSession()
+    if url != nil { persistSession() }
   }
 
   func setQueue(_ links: [SavedLink], index: Int) {

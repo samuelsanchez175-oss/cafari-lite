@@ -136,6 +136,8 @@ final class SettingsViewController: UITableViewController {
             "Wallpaper Shortcuts shows Maps, Music, Phone, and Dashboard next to your starred links."
         case .diagnostics:
             "Capture real-time playback events and UI states."
+        case .legal:
+            "Cafari replaces Reels Sync. One CarPlay app on this device: com.samuelsanchez.ytos27."
         default:
             nil
         }

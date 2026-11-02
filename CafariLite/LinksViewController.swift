@@ -345,6 +345,12 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
     traitCollection.userInterfaceStyle == .dark ? .lightContent : .darkContent
   }
 
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    PhonePlayback.shared.restoreSavedSession(from: store.links)
+    updateContinueBanner()
+  }
+
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     guard !didTraceLink, ProcessInfo.processInfo.environment["CAFARI_TRACE_LINK"] == "1" else { return }
@@ -579,6 +585,7 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
       checked.removeAll()
     }
     selectButton.setTitle(selecting ? "Done" : "Select", for: .normal)
+    updateContinueBanner()
     table.reloadData()
   }
 
@@ -597,7 +604,59 @@ final class LinksViewController: UIViewController, UITableViewDataSource, UITabl
       .foregroundColor: Taste.charcoal.withAlphaComponent(0.5),
       .kern: 1.1,
     ])
+    updateContinueBanner()
     table.reloadData()
+  }
+
+  private func updateContinueBanner() {
+    guard !selecting,
+          let title = PhonePlayback.shared.currentTitle,
+          PhonePlayback.shared.currentURL != nil else {
+      if table.tableHeaderView != nil { table.tableHeaderView = nil }
+      return
+    }
+    let trimmed = title.count > 42 ? String(title.prefix(39)) + "…" : title
+    let button = UIButton(type: .system, primaryAction: UIAction { [weak self] _ in
+      self?.resumeLastLink()
+    })
+    var config = UIButton.Configuration.plain()
+    config.title = "Continue · \(trimmed)"
+    config.image = UIImage(systemName: "play.fill")
+    config.imagePadding = 8
+    config.imagePlacement = .leading
+    config.baseForegroundColor = Taste.electric
+    config.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
+    button.configuration = config
+    button.contentHorizontalAlignment = .leading
+    button.backgroundColor = Taste.electricSubtle
+    let header = UIView(frame: CGRect(x: 0, y: 0, width: table.bounds.width, height: 44))
+    button.frame = header.bounds
+    button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    header.addSubview(button)
+    table.tableHeaderView = header
+  }
+
+  private func resumeLastLink() {
+    let playback = PhonePlayback.shared
+    guard let url = playback.currentURL else { return }
+    let index = min(playback.queueIndex, max(0, store.links.count - 1))
+    playback.setQueue(store.links, index: index)
+    playback.remember(title: playback.currentTitle ?? "Video", url: url)
+    Log.write("links resume \(playback.currentTitle ?? "-")")
+    switch playback.mode {
+    case .stream:
+      CarSender.sendDirect(url)
+      openQueue(onCar: true, send: false)
+    case .webOnCar, .mirror:
+      CarSender.sendPage(url)
+      let page: UIViewController = if url.host()?.contains("youtube.") == true {
+        BrowserViewController(showsStatus: true, initialURL: url)
+      } else {
+        PageBrowserController(url: url, title: playback.currentTitle ?? "Link")
+      }
+      page.modalPresentationStyle = .fullScreen
+      present(page, animated: true)
+    }
   }
 
   private func refreshPill() {
