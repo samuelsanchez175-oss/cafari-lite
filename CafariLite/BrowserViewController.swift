@@ -152,10 +152,13 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
 
     container.addArrangedSubview(button("chevron.backward") { [weak self] in self?.webView.goBack() })
     container.addArrangedSubview(button("chevron.forward") { [weak self] in self?.webView.goForward() })
-    container.addArrangedSubview(button("house") { [weak self] in
-      guard let self else { return }
-      self.webView.load(URLRequest(url: self.home))
-    })
+    let homeButton = button("house") { [weak self] in
+      self?.exitBrowser()
+    }
+    if showsStatus {
+      homeButton.accessibilityLabel = "Close"
+    }
+    container.addArrangedSubview(homeButton)
     container.addArrangedSubview(button("arrow.clockwise") { [weak self] in self?.webView.reload() })
     if showsStatus {
       // Hand whatever the phone is showing to the car window. The car cannot
@@ -184,6 +187,23 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate {
       updateStatus()
     }
     return container
+  }
+
+  /// Phone Links opens this browser modally; home closes it. CarPlay pushes it;
+  /// home pops back to the link grid. Otherwise reload the page we opened with.
+  private func exitBrowser() {
+    if showsStatus, presentingViewController != nil {
+      Log.write("browser home dismiss")
+      dismiss(animated: true)
+      return
+    }
+    if let nav = navigationController, nav.viewControllers.count > 1, nav.viewControllers.last === self {
+      Log.write("browser home pop")
+      nav.popViewController(animated: true)
+      return
+    }
+    Log.write("browser home reload \(home.absoluteString)")
+    webView.load(URLRequest(url: home))
   }
 
   private func makeSettingsMenu() -> UIMenu {
